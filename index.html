@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>読書記録アプリver.46.3</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registered: ', reg))
+                    .catch(err => console.log('Service Worker registration failed: ', err));
+            });
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
+    <style>
+        :root {
+            --c0: #e0e0e0; --c1: #ffcdd2; --c2: #f8bbd0; --c3: #e1bee7; --c4: #bbdefb;
+            --c5: #b2dfdb; --c6: #c8e6c9; --c7: #fff9c4; --c8: #ffe0b2; --c9: #ffccbc;
+            --main-bg: #fffde7;
+            --accent: #fbc02d;
+            --text: #333;
+        }
+        body { font-family: "Meiryo", sans-serif; text-align: center; background-color: var(--main-bg); color: var(--text); padding: 10px; margin: 0; }
+        
+        #net-status { font-size: 10px; margin-bottom: 5px; font-weight: bold; }
+        .online { color: #43a047; } .offline { color: #e57373; }
+
+        #celebration-card { 
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: white; border: 4px solid var(--accent); padding: 30px; border-radius: 20px; 
+            z-index: 10000; display: none; box-shadow: 0 0 50px rgba(251,192,45,0.5);
+            animation: popin 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popin { from { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+
+        #status-card { position: fixed; top: 25%; left: 50%; transform: translateX(-50%); background: rgba(76, 175, 80, 0.95); color: white; padding: 20px; border-radius: 15px; font-size: 16px; font-weight: bold; display: none; z-index: 9999; box-shadow: 0 8px 20px rgba(0,0,0,0.3); width: 80%; border: 2px solid white; }
+        
+        /* 日付選択用ダイアログ */
+        #date-select-card { 
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: white; border: 4px solid var(--accent); padding: 20px 30px; border-radius: 20px; 
+            z-index: 10001; display: none; box-shadow: 0 8px 30px rgba(0,0,0,0.3); width: 80%; max-width: 320px;
+        }
+
+        .header-box { background: white; padding: 10px; border-radius: 15px; border: 3px solid var(--accent); margin-bottom: 10px; }
+        .counter { font-size: 20px; font-weight: bold; color: #f57f17; }
+        
+        .genre-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 8px; border-top: 1px dashed var(--accent); padding-top: 8px; }
+        .genre-badge { font-size: 10px; padding: 3px 5px; border-radius: 4px; background: #eee; color: #999; border: 1px solid #ddd; }
+        .genre-badge.active { color: #333; font-weight: bold; border: 1px solid rgba(0,0,0,0.2); }
+        
+        .badge-n0 { background-color: var(--c0); } .badge-n1 { background-color: var(--c1); }
+        .badge-n2 { background-color: var(--c2); } .badge-n3 { background-color: var(--c3); }
+        .badge-n4 { background-color: var(--c4); } .badge-n5 { background-color: var(--c5); }
+        .badge-n6 { background-color: var(--c6); } .badge-n7 { background-color: var(--c7); }
+        .badge-n8 { background-color: var(--c8); } .badge-n9 { background-color: var(--c9); }
+
+        #interactive.viewport { width: 100%; max-width: 480px; height: 140px; margin: 0 auto; border: 5px solid var(--accent); border-radius: 15px; background: #000; overflow: hidden; position: relative; }
+        .controls { margin: 10px auto; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        button { padding: 12px; font-size: 15px; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; color: white; }
+        .btn-main { background: var(--accent); color: #333; width: 92%; font-size: 18px; border: 2px solid #f9a825; box-shadow: 0 3px 0 #f57f17; }
+        
+        .sort-box { width: 92%; margin: 10px auto 0; text-align: right; font-size: 11px; }
+        .sort-box select { padding: 3px; border-radius: 5px; border: 1px solid var(--accent); }
+
+        table { width: 100%; margin-top: 5px; border-collapse: collapse; background: white; font-size: 10px; table-layout: fixed; }
+        th, td { border: 1px solid rgba(0,0,0,0.1); padding: 5px 2px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        th { background: #fff59d; color: #5d4037; font-size: 9px; text-align: center; }
+
+        .row-n0 { background-color: var(--c0); } .row-n1 { background-color: var(--c1); }
+        .row-n2 { background-color: var(--c2); } .row-n3 { background-color: var(--c3); }
+        .row-n4 { background-color: var(--c4); } .row-n5 { background-color: var(--c5); }
+        .row-n6 { background-color: var(--c6); } .row-n7 { background-color: var(--c7); }
+        .row-n8 { background-color: var(--c8); } .row-n9 { background-color: var(--c9); }
+
+        select, input[type="text"] { font-size: 10px; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 3px; background: rgba(255,255,255,0.6); }
+    </style>
+</head>
+<body>
+    <div id="net-status"></div>
+    <div id="status-card"></div>
+    <div id="celebration-card" onclick="this.style.display='none'"></div>
+    
+    <div id="date-select-card">
+        <h3 style="margin-top:0; color:#f57f17; font-size:15px;">CSVファイルの保存</h3>
+        <p style="font-size:12px; color:#555; margin-bottom:15px;">ファイル名に今日の日付を含めますか？</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button style="background: var(--accent); color: #333; font-size:13px;" onclick="proceedDownload(false)">日付を入れない<br><span style="font-size:10px; font-weight:normal;">（〇〇さんの読書記録）</span></button>
+            <button style="background: #fff9c4; color: #333; font-size:13px;" onclick="proceedDownload(true)">日付を入れる<br><span style="font-size:10px; font-weight:normal;">（〇〇さんの○月○日までの読書記録）</span></button>
+            <button style="background: #9e9e9e; color: white; padding: 8px; font-size:12px; border:none;" onclick="document.getElementById('date-select-card').style.display='none'">キャンセル</button>
+        </div>
+    </div>
+    
+    <div class="header-box">
+        <div id="display-name" style="font-size:13px; color:#f57f17;">名前を登録してね</div>
+        <div class="counter">合計：<span id="total-count">0</span> 冊</div>
+        <div class="genre-stats" id="genre-stats-list"></div>
+    </div>
+
+    <div id="interactive" class="viewport"></div>
+
+    <div class="controls">
+        <div style="display:flex; gap:8px; width: 92%; margin-top:5px;">
+            <button style="background:#fff176; color:#333; border:1px solid var(--accent); flex:1; font-size:12px;" onclick="askName()">名前・学級を登録</button>
+            <button style="background:#fff176; color:#333; border:1px solid var(--accent); flex:1; font-size:12px;" onclick="document.getElementById('upload-csv').click()">読書記録を読み込む</button>
+            <input type="file" id="upload-csv" accept=".csv" style="display:none" onchange="loadCSV(this)">
+        </div>
+        <button class="btn-main" id="camera-btn" onclick="toggleCamera()">バーコードスキャン</button>
+        <div style="display:flex; gap:8px; width: 92%;">
+            <button style="background:#78909c; flex:1;" onclick="forceManualInput()">コード入力／オフライン入力</button>
+            <button style="background:#43a047; flex:1;" onclick="downloadCSV()">読書記録を保存する</button>
+        </div>
+    </div>
+
+<div class="sort-box">
+        ならびかえ：
+        <select id="sort-select" onchange="updateUI()">
+            <option value="new">新しい順</option>
+            <option value="old">古い順</option>
+            <option value="ndc">分類順（0〜9）</option>
+            <option value="ndc_desc">分類順（9〜0）</option>
+            <option value="stars">おすすめ順</option>
+        </select>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width:16px">No</th>
+                <th style="width:26px">日</th>
+                <th>タイトル</th>
+                <th style="width:100px">作者</th>
+                <th style="width:50px">分類</th>
+                <th style="width:95px">本の場所</th>
+                <th style="width:100px">おすすめ度</th>
+                <th>感想</th>
+                <th style="width:60px">記録を消す</th>
+            </tr>
+        </thead>
+        <tbody id="book-list"></tbody>
+    </table>
+
+    <script>
+        let bookData = [];
+        let userName = "";
+        let userGrade = "";
+        let userClassName = ""; 
+        let userNumber = "";
+        let isCameraRunning = false;
+        const ndcNames = ["0 総記","1 哲学","2 歴史","3 社会","4 自然","5 技術","6 産業","7 芸術","8 言語","9 文学"];
+        const beepSound = new Audio('data:audio/wav;base64,UklGRlQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YRAAAAAAAP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A');
+
+        function updateNetStatus() {
+            const el = document.getElementById('net-status');
+            if (navigator.onLine) { el.innerHTML = "● オンライン（自動検索OK）"; el.className = "online"; }
+            else { el.innerHTML = "○ オフライン（手入力のみ）"; el.className = "offline"; }
+        }
+        window.addEventListener('online', updateNetStatus);
+        window.addEventListener('offline', updateNetStatus);
+        updateNetStatus();
+
+        function playBeep() { beepSound.play().catch(()=>{}); }
+
+        function showCelebration(msg) {
+            const el = document.getElementById('celebration-card');
+            el.innerHTML = `<h2 style="margin:0; color:#f57f17;">🎉 おめでとう！ 🎉</h2><p style="font-size:18px; margin:15px 0;">${msg}</p><button style="background:var(--accent); padding:5px 20px; color:white; border-radius:5px;">とじる</button>`;
+            el.style.display = 'block';
+            playBeep();
+        }
+
+        function showFlash(msg, color="rgba(76, 175, 80, 0.95)") {
+            const card = document.getElementById('status-card');
+            card.innerHTML = msg; card.style.background = color; card.style.display = 'block';
+            setTimeout(() => { card.style.display = 'none'; }, 3000);
+        }
+
+        function checkAchievements() {
+            const total = bookData.length;
+            if (total > 0 && total % 10 === 0) {
+                showCelebration(`合計 ${total} 冊達成！<br>読書の達人ですね！`);
+                return;
+            }
+            const counts = Array(10).fill(0);
+            bookData.forEach(b => { if(b.ndc !== "") counts[parseInt(b.ndc)]++; });
+            for (let i = 0; i < 10; i++) {
+                if (counts[i] > 0 && counts[i] % 5 === 0) {
+                    showCelebration(`「${ndcNames[i]}」の本が<br>${counts[i]}冊になりました！すごい！`);
+                    break; 
+                }
+            }
+        }
+
+        function predictNDC(title) {
+            const rules = [
+                { k: /図鑑|百科|コンピュータ|辞書/, n: "0" }, { k: /心|悩み|道徳|神|占い/, n: "1" },
+                { k: /歴史|伝記|地図|世界|日本/, n: "2" }, { k: /政治|経済|社会|学校|仕事/, n: "3" },
+                { k: /理科|算数|宇宙|恐竜|動物|植物|昆虫|体/, n: "4" }, { k: /料理|工作|レシピ|乗り物|鉄道/, n: "5" },
+                { k: /農業|漁業|産業|工場/, n: "6" }, { k: /スポーツ|音楽|マンガ|イラスト|写真/, n: "7" },
+                { k: /漢字|英語|言葉|国語/, n: "8" }, { k: /物語|小説|童話|詩|推理|冒険/, n: "9" }
+            ];
+            for (let r of rules) { if (r.k.test(title)) return r.n; }
+            return "";
+        }
+
+     async function toggleCamera() {
+            if (isCameraRunning) { 
+                await Quagga.stop(); 
+                isCameraRunning = false; 
+                document.getElementById('camera-btn').innerText = "バーコードスキャン"; 
+                document.getElementById('interactive').innerHTML = ''; // ★ この1行を追加
+                return; 
+            }
+
+            if (!navigator.onLine) {
+                alert("今はオフラインなので、バーコードスキャンはできません。\n「コード入力／オフライン入力」ボタンから登録してください。");
+                return;
+            }
+
+            Quagga.init({
+                inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive'), constraints: { facingMode: "environment" } },
+                decoder: { readers: ["ean_reader"] }
+            }, (err) => { 
+                if (!err) { 
+                    Quagga.start(); 
+                    isCameraRunning = true; 
+                    document.getElementById('camera-btn').innerText = "とめる"; 
+                } 
+            });
+        }
+
+        Quagga.onDetected((r) => {
+            if (!Quagga.paused && r.codeResult.code.startsWith("978")) {
+                Quagga.pause();
+                fetchNDL(r.codeResult.code);
+            }
+        });
+
+        async function fetchNDL(isbn) {
+            showFlash("🔍 しらべています...", "var(--accent)");
+            try {
+                const res = await fetch(`https://ndlsearch.ndl.go.jp/api/opensearch?isbn=${isbn}`);
+                const xml = new DOMParser().parseFromString(await res.text(), "text/xml");
+                const item = xml.querySelector("item");
+                if (item) {
+                    playBeep();
+                    const title = item.querySelector("title").textContent;
+                    let author = item.querySelector("author")?.textContent || "不明";
+                    author = author.replace(/[\[\]\(\)\/／,.,，、。:：0-9\-－・]/g, ' ').replace(/(著|監修|編|訳|原案|作|絵|文|集)/g, ' ').trim().split(/\s+/).slice(0, 2).join(' '); 
+                    let ndc = "";
+                    const cats = xml.getElementsByTagName("category");
+                    for (let c of cats) { if (c.getAttribute("domain") === "dcndl:ndc") { ndc = c.textContent.substring(0, 1); break; } }
+                    if (!ndc) ndc = predictNDC(title);
+                    addRecord(title, author, ndc);
+                    showFlash(`✅ 登録！<br>${title}`);
+                    checkAchievements();
+                } else { showFlash("❌ 見つかりませんでした", "#e57373"); }
+            } catch (e) { showFlash("⚠️ エラー", "#e57373"); }
+            if (isCameraRunning) setTimeout(() => Quagga.resume(), 2000);
+        }
+
+        function addRecord(title, author, ndc) {
+            const today = new Date();
+            const dateStr = `${today.getMonth()+1}/${today.getDate()}`;
+            bookData.push({ id: Date.now(), title, author, ndc, stars: "3", memo: "", date: dateStr, location: "", timestamp: Date.now() });
+            updateUI();
+        }
+
+        function updateUI() {
+            const tbody = document.getElementById('book-list');
+            const sortVal = document.getElementById('sort-select').value;
+            tbody.innerHTML = "";
+            
+            document.getElementById('total-count').innerText = bookData.length;
+            const counts = Array(10).fill(0);
+            bookData.forEach(b => { if(b.ndc !== "") counts[parseInt(b.ndc)]++; });
+            
+            document.getElementById('genre-stats-list').innerHTML = counts.map((c, i) => {
+                const activeClass = c > 0 ? `active badge-n${i}` : '';
+                return `<div class="genre-badge ${activeClass}">${i}:${c}</div>`;
+            }).join('');
+
+            let sortedData = [...bookData];
+            if (sortVal === "new") sortedData.sort((a, b) => b.timestamp - a.timestamp);
+            else if (sortVal === "old") sortedData.sort((a, b) => a.timestamp - b.timestamp);
+            else if (sortVal === "ndc") sortedData.sort((a, b) => (a.ndc || "99").localeCompare(b.ndc || "99"));
+            else if (sortVal === "ndc_desc") sortedData.sort((a, b) => (b.ndc || "99").localeCompare(a.ndc || "99"));
+            else if (sortVal === "stars") sortedData.sort((a, b) => (parseInt(b.stars) || 0) - (parseInt(a.stars) || 0));
+
+            sortedData.forEach((b) => {
+                const originalIndex = bookData.findIndex(x => x.id === b.id) + 1;
+                const row = tbody.insertRow();
+                if (b.ndc !== "") row.className = `row-n${b.ndc}`;
+                row.innerHTML = `
+                    <td style="text-align:center">${originalIndex}</td>
+                    <td style="font-size:8px; text-align:center">${b.date}</td>
+                    <td><input type="text" value="${b.title}" onchange="updateVal(${b.id}, 'title', this.value)"></td>
+                    <td><input type="text" value="${b.author}" onchange="updateVal(${b.id}, 'author', this.value)"></td>
+                    <td><select onchange="updateVal(${b.id}, 'ndc', this.value)">
+                        <option value="">選ぶ</option>
+                        ${ndcNames.map((t, v) => `<option value="${v}" ${b.ndc===String(v)?'selected':''}>${t}</option>`).join('')}
+                    </select></td>
+                    <td><select onchange="updateVal(${b.id}, 'location', this.value)">
+                        <option value="">選ぶ</option>
+                        <option value="1" ${b.location==='1'?'selected':''}>1.学校図書館</option>
+                        <option value="2" ${b.location==='2'?'selected':''}>2.学級の本</option>
+                        <option value="3" ${b.location==='3'?'selected':''}>3.家の本</option>
+                        <option value="4" ${b.location==='4'?'selected':''}>4.外部の図書館</option>
+                        <option value="5" ${b.location==='5'?'selected':''}>5.その他</option>
+                    </select></td>
+                    <td><select onchange="updateVal(${b.id}, 'stars', this.value)">
+                        <option value="5" ${b.stars==='5'?'selected':''}>☆☆☆☆☆</option>
+                        <option value="4" ${b.stars==='4'?'selected':''}>☆☆☆☆</option>
+                        <option value="3" ${b.stars==='3'?'selected':''}>☆☆☆</option>
+                        <option value="2" ${b.stars==='2'?'selected':''}>☆☆</option>
+                        <option value="1" ${b.stars==='1'?'selected':''}>☆</option>
+                    </select></td>
+                    <td><input type="text" value="${b.memo}" onchange="updateVal(${b.id}, 'memo', this.value)" placeholder="感想..."></td>
+                    <td style="text-align:center"><button style="background:#e57373; font-size:9px; border:none; color:white; border-radius:3px;" onclick="deleteRec(${b.id})">×</button></td>
+                `;
+            });
+        }
+
+        function updateVal(id, key, val) { 
+            const b = bookData.find(x => x.id === id); 
+            if (b) { 
+                b[key] = val; 
+                if(key==='ndc') { 
+                    updateUI(); 
+                    checkAchievements();
+                } 
+            } 
+        }
+
+        function deleteRec(id) { if (confirm("この本の記録を消しますか？")) { bookData = bookData.filter(b => b.id !== id); updateUI(); } }
+        
+        function askName() {
+            const g = prompt("何年生ですか？（数字だけ）", userGrade);
+            const c = prompt("学級名を入力してください（例：山田）", userClassName);
+            const num = prompt("出席番号を入力してください", userNumber);
+            const n = prompt("名前を入力してください", userName);
+            if (n) {
+                userName = n; userGrade = g || ""; userClassName = c || ""; userNumber = num || "";
+                let disp = "";
+                if(userGrade) disp += userGrade + "年 ";
+                if(userClassName) disp += userClassName + "学級 ";
+                if(userNumber) disp += userNumber + "番 ";
+                document.getElementById('display-name').innerText = disp + userName + " さんの記録";
+            }
+        }
+
+        /* 保存処理（カスタムダイアログを開く） */
+        function downloadCSV() {
+            if (!userName) { askName(); if(!userName) return; }
+            document.getElementById('date-select-card').style.display = 'block';
+        }
+
+        /* 設定した選択肢でダウンロードを実施する */
+        async function proceedDownload(includeDate) {
+            document.getElementById('date-select-card').style.display = 'none';
+
+            const today = new Date();
+            let fileName = "";
+            
+            if (includeDate) {
+                fileName = `${userName}さんの${today.getMonth()+1}月${today.getDate()}日までの読書記録.csv`;
+            } else {
+                fileName = `${userName}さんの読書記録.csv`;
+            }
+            
+            let csv = "\uFEFFNo,日付,タイトル,作者,分類,星,感想,なまえ,学年,学級名,出席番号,本の場所\n";
+            bookData.forEach((b, i) => csv += `"${i+1}","${b.date}","${b.title}","${b.author}","${b.ndc}","${b.stars}","${b.memo}","${userName}","${userGrade}","${userClassName}","${userNumber}","${b.location || ""}"\n`);
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({ suggestedName: fileName, types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }] });
+                    const w = await handle.createWritable(); await w.write(blob); await w.close();
+                    showFlash("✅ 保存しました");
+                } catch (e) {}
+            } else {
+                const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fileName; a.click();
+            }
+        }
+
+        function loadCSV(input) {
+            const r = new FileReader();
+            r.onload = () => {
+                const lines = r.result.split("\n"); bookData = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const c = lines[i].split(/,(?=(?:(?:[^\"]*\"){2})*[^\"]*$)/).map(s => s.replace(/^"|\"$/g, ""));
+                    if (c.length >= 7) {
+                        if (i === 1) {
+                            userName = c[7] || ""; userGrade = c[8] || ""; userClassName = c[9] || ""; userNumber = c[10] || "";
+                            let disp = "";
+                            if(userGrade) disp += userGrade + "年 ";
+                            if(userClassName) disp += userClassName + "学級 ";
+                            if(userNumber) disp += userNumber + "番 ";
+                            document.getElementById('display-name').innerText = (disp || "名前：") + userName + " さんの記録";
+                        }
+                        bookData.push({ 
+                            id: Date.now()+i, 
+                            date: c[1], 
+                            title: c[2], 
+                            author: c[3], 
+                            ndc: c[4], 
+                            stars: c[5], 
+                            memo: c[6], 
+                            location: c[11] || "", 
+                            timestamp: Date.now()+i 
+                        });
+                    }
+                }
+                updateUI();
+                showFlash("✅ 読み込み完了");
+            };
+            r.readAsText(input.files[0]);
+        }
+
+        function forceManualInput() {
+            if (!navigator.onLine) {
+                const t = prompt("本のタイトルは？");
+                if (t) {
+                    const a = prompt("作者はだれですか？");
+                    addRecord(t, a || "不明", predictNDC(t));
+                }
+            } else {
+                const isbn = prompt("ISBNコード（数字13けた）を入力してください。\n空らんでOKを押すと、オフライン入力（本のタイトル入力）をはじめます。");
+                if (isbn && isbn.trim() !== "") fetchNDL(isbn.trim());
+                else {
+                    const t = prompt("本のタイトルは？");
+                    if (t) {
+                        const a = prompt("作者はだれですか？");
+                        addRecord(t, a || "不明", predictNDC(t));
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
