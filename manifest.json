@@ -1,0 +1,20 @@
+{
+  "name": "読書記録アプリ",
+  "short_name": "読書記録",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#fffde7",
+  "theme_color": "#ffcdd2",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
